@@ -120,6 +120,32 @@ namespace MeshyRhino.Services
 
         #endregion
 
+        #region Retexture
+
+        public async Task<string> CreateRetextureAsync(RetextureRequest request, CancellationToken ct = default)
+        {
+            string json = JsonConvert.SerializeObject(request);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync("/openapi/v1/retexture", content, ct);
+            await EnsureSuccessAsync(response);
+
+            string body = await response.Content.ReadAsStringAsync();
+            var result = JsonConvert.DeserializeObject<MeshyTaskCreateResponse>(body);
+            return result.Result;
+        }
+
+        public async Task<MeshyTaskStatus> GetRetextureTaskAsync(string taskId, CancellationToken ct = default)
+        {
+            var response = await _httpClient.GetAsync($"/openapi/v1/retexture/{taskId}", ct);
+            await EnsureSuccessAsync(response);
+
+            string body = await response.Content.ReadAsStringAsync();
+            return JsonConvert.DeserializeObject<MeshyTaskStatus>(body);
+        }
+
+        #endregion
+
         #region Polling & Download
 
         public async Task<MeshyTaskStatus> PollUntilCompleteAsync(
@@ -142,6 +168,9 @@ namespace MeshyRhino.Services
                         break;
                     case GenerationMode.MultiImageTo3D:
                         status = await GetMultiImageTo3DTaskAsync(taskId, ct);
+                        break;
+                    case GenerationMode.Retexture:
+                        status = await GetRetextureTaskAsync(taskId, ct);
                         break;
                     default:
                         throw new ArgumentOutOfRangeException(nameof(mode));
@@ -179,6 +208,24 @@ namespace MeshyRhino.Services
         }
 
         #endregion
+
+        public async Task<T> WithRetryAsync<T>(Func<Task<T>> action, int maxRetries, CancellationToken ct)
+        {
+            int attempt = 0;
+            while (true)
+            {
+                try
+                {
+                    return await action();
+                }
+                catch (HttpRequestException) when (attempt < maxRetries && !ct.IsCancellationRequested)
+                {
+                    attempt++;
+                    int delayMs = 1000 * (1 << attempt);
+                    await Task.Delay(delayMs, ct);
+                }
+            }
+        }
 
         private async Task EnsureSuccessAsync(HttpResponseMessage response)
         {

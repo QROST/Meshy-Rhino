@@ -1,0 +1,16 @@
+name: meshy-rhino
+version: 0.3.0
+authors:
+  - QROST
+description: >
+  AI-powered 3D model generation from Meshy directly inside Rhinoceros 8.
+  Generate meshes from text prompts, single images, or multiple images using
+  the Meshy API. Supports Text-to-3D, Image-to-3D, Multi-Image-to-3D, and
+  Text-to-Texture workflows with GLB and OBJ import.
+url: "https://github.com/QROST/Meshy-Rhino"
+keywords:
+  - meshy
+  - ai
+  - 3d-generation
+  - text-to-3d
+  - image-to-3d

@@ -21,11 +21,26 @@ namespace MeshyRhino.Services
         [JsonProperty("default_ai_model")]
         public string DefaultAiModel { get; set; } = "latest";
 
+        [JsonProperty("default_model_type")]
+        public string DefaultModelType { get; set; } = "standard";
+
+        [JsonProperty("default_symmetry_mode")]
+        public string DefaultSymmetryMode { get; set; } = "auto";
+
         [JsonProperty("enable_pbr")]
         public bool EnablePbr { get; set; } = false;
 
+        [JsonProperty("default_format")]
+        public string DefaultFormat { get; set; } = "glb";
+
+        [JsonProperty("default_placement")]
+        public string DefaultPlacement { get; set; } = "mesh";
+
         [JsonProperty("poll_interval_ms")]
         public int PollIntervalMs { get; set; } = 3000;
+
+        [JsonProperty("api_retry_count")]
+        public int ApiRetryCount { get; set; } = 2;
     }
 
     public static class MeshySettingsService

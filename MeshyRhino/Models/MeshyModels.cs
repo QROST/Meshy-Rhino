@@ -152,6 +152,37 @@ namespace MeshyRhino.Models
 
     #endregion
 
+    #region Text-to-Texture (Retexture)
+
+    public class RetextureRequest
+    {
+        [JsonProperty("input_task_id", NullValueHandling = NullValueHandling.Ignore)]
+        public string InputTaskId { get; set; }
+
+        [JsonProperty("model_url", NullValueHandling = NullValueHandling.Ignore)]
+        public string ModelUrl { get; set; }
+
+        [JsonProperty("text_style_prompt", NullValueHandling = NullValueHandling.Ignore)]
+        public string TextStylePrompt { get; set; }
+
+        [JsonProperty("image_style_url", NullValueHandling = NullValueHandling.Ignore)]
+        public string ImageStyleUrl { get; set; }
+
+        [JsonProperty("ai_model")]
+        public string AiModel { get; set; } = "latest";
+
+        [JsonProperty("enable_original_uv")]
+        public bool EnableOriginalUv { get; set; } = true;
+
+        [JsonProperty("enable_pbr")]
+        public bool EnablePbr { get; set; } = false;
+
+        [JsonProperty("remove_lighting")]
+        public bool RemoveLighting { get; set; } = true;
+    }
+
+    #endregion
+
     #region Task Response
 
     public class MeshyTaskCreateResponse
@@ -270,7 +301,8 @@ namespace MeshyRhino.Models
     {
         TextTo3D,
         ImageTo3D,
-        MultiImageTo3D
+        MultiImageTo3D,
+        Retexture
     }
 
     #endregion

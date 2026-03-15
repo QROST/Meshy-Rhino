@@ -4,9 +4,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 using Rhino;
 using MeshyRhino.Models;
 using MeshyRhino.Services;
@@ -22,18 +25,69 @@ namespace MeshyRhino.UI
         public MeshyGeneratorWindow()
         {
             InitializeComponent();
+            ApplyDefaults();
         }
+
+        #region Defaults
+
+        private void ApplyDefaults()
+        {
+            var s = MeshySettingsService.Load();
+
+            SelectByTag(CbAiModel, s.DefaultAiModel);
+            SelectByTag(CbTopology, s.DefaultTopology);
+            SelectByTag(CbModelType, s.DefaultModelType);
+            SelectByTag(CbSymmetry, s.DefaultSymmetryMode);
+            SelectByTag(CbFormat, s.DefaultFormat);
+
+            TbPolycount.Text = s.DefaultPolycount.ToString();
+            CbPbr.IsChecked = s.EnablePbr;
+
+            if (s.DefaultPlacement == "block")
+            {
+                RbBlock.IsChecked = true;
+            }
+            else
+            {
+                RbMesh.IsChecked = true;
+            }
+        }
+
+        private static void SelectByTag(ComboBox cb, string tag)
+        {
+            if (string.IsNullOrEmpty(tag)) return;
+            for (int i = 0; i < cb.Items.Count; i++)
+            {
+                if (cb.Items[i] is ComboBoxItem item && item.Tag as string == tag)
+                {
+                    cb.SelectedIndex = i;
+                    return;
+                }
+            }
+        }
+
+        #endregion
 
         #region Shared Helpers
 
         private string GetSelectedAiModel()
         {
-            return CbAiModel.SelectedIndex == 0 ? "latest" : "meshy-5";
+            return (CbAiModel.SelectedItem as ComboBoxItem)?.Tag as string ?? "latest";
         }
 
         private string GetSelectedTopology()
         {
-            return CbTopology.SelectedIndex == 0 ? "triangle" : "quad";
+            return (CbTopology.SelectedItem as ComboBoxItem)?.Tag as string ?? "triangle";
+        }
+
+        private string GetSelectedModelType()
+        {
+            return (CbModelType.SelectedItem as ComboBoxItem)?.Tag as string ?? "standard";
+        }
+
+        private string GetSelectedSymmetry()
+        {
+            return (CbSymmetry.SelectedItem as ComboBoxItem)?.Tag as string ?? "auto";
         }
 
         private int GetTargetPolycount()
@@ -43,10 +97,10 @@ namespace MeshyRhino.UI
             return 30000;
         }
 
-        private void CbFormat_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        private void CbFormat_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (RbMesh == null || RbBlock == null) return;
-            
+
             bool isObj = CbFormat.SelectedIndex == 1;
             RbMesh.IsEnabled = isObj;
             RbBlock.IsEnabled = isObj;
@@ -54,12 +108,17 @@ namespace MeshyRhino.UI
 
         private string GetSelectedFormat()
         {
-            return CbFormat.SelectedIndex == 0 ? "glb" : "obj";
+            return (CbFormat.SelectedItem as ComboBoxItem)?.Tag as string ?? "glb";
         }
 
         private PlacementMode GetPlacementMode()
         {
             return RbBlock.IsChecked == true ? PlacementMode.Block : PlacementMode.Mesh;
+        }
+
+        private int GetRetryCount()
+        {
+            return MeshySettingsService.Load().ApiRetryCount;
         }
 
         private void SetGenerating(bool generating)
@@ -68,6 +127,7 @@ namespace MeshyRhino.UI
             BtnTextGenerate.IsEnabled = !generating;
             BtnImageGenerate.IsEnabled = !generating;
             BtnMultiGenerate.IsEnabled = !generating;
+            BtnRetexture.IsEnabled = !generating;
             BtnCancel.Visibility = generating ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -185,6 +245,37 @@ namespace MeshyRhino.UI
 
         #endregion
 
+        #region Thumbnail
+
+        private void ShowThumbnail(string thumbnailUrl)
+        {
+            if (string.IsNullOrWhiteSpace(thumbnailUrl)) return;
+
+            try
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(thumbnailUrl, UriKind.Absolute);
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.EndInit();
+
+                ThumbnailImage.Source = bitmap;
+                ThumbnailBorder.Visibility = Visibility.Visible;
+            }
+            catch
+            {
+                ThumbnailBorder.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void HideThumbnail()
+        {
+            ThumbnailBorder.Visibility = Visibility.Collapsed;
+            ThumbnailImage.Source = null;
+        }
+
+        #endregion
+
         #region Text-to-3D
 
         private async void BtnTextGenerate_Click(object sender, RoutedEventArgs e)
@@ -198,9 +289,12 @@ namespace MeshyRhino.UI
             }
 
             SetGenerating(true);
+            HideThumbnail();
             _cts?.Dispose();
             _cts = new CancellationTokenSource();
             var settings = MeshySettingsService.Load();
+            int retries = settings.ApiRetryCount;
+            bool skipRefine = CbSkipRefine.IsChecked == true;
 
             try
             {
@@ -212,16 +306,30 @@ namespace MeshyRhino.UI
                         Prompt = prompt,
                         AiModel = GetSelectedAiModel(),
                         Topology = GetSelectedTopology(),
-                        TargetPolycount = GetTargetPolycount()
+                        TargetPolycount = GetTargetPolycount(),
+                        ModelType = GetSelectedModelType() == "standard" ? null : GetSelectedModelType(),
+                        SymmetryMode = GetSelectedSymmetry()
                     };
 
-                    string previewId = await api.CreateTextTo3DPreviewAsync(previewRequest, _cts.Token);
+                    string previewId = await api.WithRetryAsync(
+                        () => api.CreateTextTo3DPreviewAsync(previewRequest, _cts.Token),
+                        retries, _cts.Token);
+
                     SetStatus("[Meshy Rhino] Generating preview...", 5);
 
+                    int progressScale = skipRefine ? 1 : 2;
                     var previewResult = await api.PollUntilCompleteAsync(
                         previewId, GenerationMode.TextTo3D,
-                        new Progress<int>(p => SetStatus($"Preview: {p}%", p / 2)),
+                        new Progress<int>(p => SetStatus($"Preview: {p}%", p / progressScale)),
                         _cts.Token, settings.PollIntervalMs);
+
+                    ShowThumbnail(previewResult.ThumbnailUrl);
+
+                    if (skipRefine)
+                    {
+                        await DownloadAndPlace(api, previewResult, prompt, _cts.Token);
+                        return;
+                    }
 
                     SetStatus("[Meshy Rhino] Creating refine task...", 50);
                     var refineRequest = new TextTo3DRefineRequest
@@ -232,7 +340,10 @@ namespace MeshyRhino.UI
                         TexturePrompt = TbTexturePrompt.Text?.Trim()
                     };
 
-                    string refineId = await api.CreateTextTo3DRefineAsync(refineRequest, _cts.Token);
+                    string refineId = await api.WithRetryAsync(
+                        () => api.CreateTextTo3DRefineAsync(refineRequest, _cts.Token),
+                        retries, _cts.Token);
+
                     SetStatus("[Meshy Rhino] Refining with texture...", 55);
 
                     var refineResult = await api.PollUntilCompleteAsync(
@@ -240,6 +351,7 @@ namespace MeshyRhino.UI
                         new Progress<int>(p => SetStatus($"Refine: {p}%", 50 + p / 2)),
                         _cts.Token, settings.PollIntervalMs);
 
+                    ShowThumbnail(refineResult.ThumbnailUrl);
                     await DownloadAndPlace(api, refineResult, prompt, _cts.Token);
                 }
             }
@@ -276,9 +388,11 @@ namespace MeshyRhino.UI
                 imageUrl = ImageFileToDataUri(imagePath);
 
             SetGenerating(true);
+            HideThumbnail();
             _cts?.Dispose();
             _cts = new CancellationTokenSource();
             var settings = MeshySettingsService.Load();
+            int retries = settings.ApiRetryCount;
 
             try
             {
@@ -292,10 +406,15 @@ namespace MeshyRhino.UI
                         Topology = GetSelectedTopology(),
                         TargetPolycount = GetTargetPolycount(),
                         ShouldTexture = CbShouldTexture.IsChecked == true,
-                        EnablePbr = CbPbr.IsChecked == true
+                        EnablePbr = CbPbr.IsChecked == true,
+                        SymmetryMode = GetSelectedSymmetry(),
+                        RemoveLighting = CbRemoveLighting.IsChecked == true ? true : (bool?)null
                     };
 
-                    string taskId = await api.CreateImageTo3DAsync(request, _cts.Token);
+                    string taskId = await api.WithRetryAsync(
+                        () => api.CreateImageTo3DAsync(request, _cts.Token),
+                        retries, _cts.Token);
+
                     SetStatus("[Meshy Rhino] Generating...", 5);
 
                     var result = await api.PollUntilCompleteAsync(
@@ -303,6 +422,7 @@ namespace MeshyRhino.UI
                         new Progress<int>(p => SetStatus($"Progress: {p}%", p)),
                         _cts.Token, settings.PollIntervalMs);
 
+                    ShowThumbnail(result.ThumbnailUrl);
                     await DownloadAndPlace(api, result, "Meshy_ImageTo3D", _cts.Token);
                 }
             }
@@ -347,9 +467,11 @@ namespace MeshyRhino.UI
             }
 
             SetGenerating(true);
+            HideThumbnail();
             _cts?.Dispose();
             _cts = new CancellationTokenSource();
             var settings = MeshySettingsService.Load();
+            int retries = settings.ApiRetryCount;
 
             try
             {
@@ -365,10 +487,15 @@ namespace MeshyRhino.UI
                         Topology = GetSelectedTopology(),
                         TargetPolycount = GetTargetPolycount(),
                         ShouldTexture = CbMultiShouldTexture.IsChecked == true,
-                        EnablePbr = CbPbr.IsChecked == true
+                        EnablePbr = CbPbr.IsChecked == true,
+                        SymmetryMode = GetSelectedSymmetry(),
+                        RemoveLighting = CbRemoveLighting.IsChecked == true ? true : (bool?)null
                     };
 
-                    string taskId = await api.CreateMultiImageTo3DAsync(request, _cts.Token);
+                    string taskId = await api.WithRetryAsync(
+                        () => api.CreateMultiImageTo3DAsync(request, _cts.Token),
+                        retries, _cts.Token);
+
                     SetStatus("[Meshy Rhino] Generating...", 5);
 
                     var result = await api.PollUntilCompleteAsync(
@@ -376,6 +503,7 @@ namespace MeshyRhino.UI
                         new Progress<int>(p => SetStatus($"Progress: {p}%", p)),
                         _cts.Token, settings.PollIntervalMs);
 
+                    ShowThumbnail(result.ThumbnailUrl);
                     await DownloadAndPlace(api, result, "Meshy_MultiImageTo3D", _cts.Token);
                 }
             }
@@ -425,12 +553,142 @@ namespace MeshyRhino.UI
 
         #endregion
 
+        #region Text-to-Texture (Retexture)
+
+        private async void BtnRetexture_Click(object sender, RoutedEventArgs e)
+        {
+            var request = new RetextureRequest
+            {
+                AiModel = GetSelectedAiModel(),
+                EnablePbr = CbPbr.IsChecked == true,
+                EnableOriginalUv = CbRetextureOriginalUv.IsChecked == true,
+                RemoveLighting = CbRemoveLighting.IsChecked == true
+            };
+
+            if (RbRetextureTaskId.IsChecked == true)
+            {
+                string taskId = TbRetextureTaskId.Text?.Trim();
+                if (string.IsNullOrWhiteSpace(taskId))
+                {
+                    MessageBox.Show("Please enter a task ID.", "Meshy Rhino",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                request.InputTaskId = taskId;
+            }
+            else
+            {
+                string modelPath = TbRetextureModelPath.Text?.Trim();
+                if (string.IsNullOrWhiteSpace(modelPath) || !File.Exists(modelPath))
+                {
+                    MessageBox.Show("Please select a valid model file.", "Meshy Rhino",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                byte[] modelBytes = File.ReadAllBytes(modelPath);
+                string ext = Path.GetExtension(modelPath).ToLowerInvariant();
+                string mime = ext == ".glb" ? "model/gltf-binary"
+                    : ext == ".obj" ? "text/plain"
+                    : ext == ".fbx" ? "application/octet-stream"
+                    : "application/octet-stream";
+                request.ModelUrl = $"data:{mime};base64,{Convert.ToBase64String(modelBytes)}";
+            }
+
+            if (RbRetextureByText.IsChecked == true)
+            {
+                string prompt = TbRetexturePrompt.Text?.Trim();
+                if (string.IsNullOrWhiteSpace(prompt))
+                {
+                    MessageBox.Show("Please enter a text style prompt.", "Meshy Rhino",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                request.TextStylePrompt = prompt;
+            }
+            else
+            {
+                string imagePath = TbRetextureImagePath.Text?.Trim();
+                if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
+                {
+                    MessageBox.Show("Please select a reference image.", "Meshy Rhino",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                request.ImageStyleUrl = ImageFileToDataUri(imagePath);
+            }
+
+            SetGenerating(true);
+            HideThumbnail();
+            _cts?.Dispose();
+            _cts = new CancellationTokenSource();
+            var settings = MeshySettingsService.Load();
+            int retries = settings.ApiRetryCount;
+
+            try
+            {
+                using (var api = new MeshyApiService(settings.ApiKey))
+                {
+                    SetStatus("[Meshy Rhino] Creating retexture task...", 0);
+
+                    string newTaskId = await api.WithRetryAsync(
+                        () => api.CreateRetextureAsync(request, _cts.Token),
+                        retries, _cts.Token);
+
+                    SetStatus("[Meshy Rhino] Retexturing...", 5);
+
+                    var result = await api.PollUntilCompleteAsync(
+                        newTaskId, GenerationMode.Retexture,
+                        new Progress<int>(p => SetStatus($"Progress: {p}%", p)),
+                        _cts.Token, settings.PollIntervalMs);
+
+                    ShowThumbnail(result.ThumbnailUrl);
+                    await DownloadAndPlace(api, result, "Meshy_Retexture", _cts.Token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                SetStatus("Cancelled.", 0);
+                SetGenerating(false);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Meshy Rhino - Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                SetStatus("Failed.", 0);
+                SetGenerating(false);
+            }
+        }
+
+        private void BtnBrowseRetextureModel_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "3D Models|*.glb;*.gltf;*.obj;*.fbx;*.stl|All Files|*.*",
+                Title = "Select Model for Retexturing"
+            };
+            if (dlg.ShowDialog() == true)
+                TbRetextureModelPath.Text = dlg.FileName;
+        }
+
+        private void BtnBrowseRetextureImage_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Images|*.jpg;*.jpeg;*.png|All Files|*.*",
+                Title = "Select Reference Style Image"
+            };
+            if (dlg.ShowDialog() == true)
+                TbRetextureImagePath.Text = dlg.FileName;
+        }
+
+        #endregion
+
         #region Download & Place
 
         private async Task DownloadAndPlace(MeshyApiService api, MeshyTaskStatus result, string name, CancellationToken ct)
         {
             name = SanitizeFileName(name);
             string format = GetSelectedFormat();
+            int retries = GetRetryCount();
 
             if (format == "glb")
             {
@@ -444,7 +702,8 @@ namespace MeshyRhino.UI
                 }
 
                 SetStatus("[Meshy Rhino] Downloading GLB...", 90);
-                byte[] glbBytes = await api.DownloadBytesAsync(glbUrl, ct);
+                byte[] glbBytes = await api.WithRetryAsync(
+                    () => api.DownloadBytesAsync(glbUrl, ct), retries, ct);
                 string tempPath = Path.Combine(Path.GetTempPath(), $"{name}_{Guid.NewGuid()}.glb");
                 File.WriteAllBytes(tempPath, glbBytes);
 
@@ -483,7 +742,8 @@ namespace MeshyRhino.UI
                 }
 
                 SetStatus("[Meshy Rhino] Downloading OBJ...", 90);
-                string objContent = await api.DownloadObjAsync(objUrl, ct);
+                string objContent = await api.WithRetryAsync(
+                    () => api.DownloadObjAsync(objUrl, ct), retries, ct);
 
                 string texturePath = null;
                 if (result.TextureUrlsList != null && result.TextureUrlsList.Count > 0)
@@ -492,7 +752,8 @@ namespace MeshyRhino.UI
                     if (!string.IsNullOrWhiteSpace(texUrl))
                     {
                         SetStatus("[Meshy Rhino] Downloading texture...", 95);
-                        byte[] texBytes = await api.DownloadBytesAsync(texUrl, ct);
+                        byte[] texBytes = await api.WithRetryAsync(
+                            () => api.DownloadBytesAsync(texUrl, ct), retries, ct);
                         texturePath = PersistTextureFile(name, texBytes);
                     }
                 }
@@ -522,7 +783,8 @@ namespace MeshyRhino.UI
         {
             var settingsWindow = new MeshySettingsWindow();
             settingsWindow.Owner = this;
-            settingsWindow.ShowDialog();
+            if (settingsWindow.ShowDialog() == true)
+                ApplyDefaults();
         }
 
         #endregion

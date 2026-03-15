@@ -1,35 +1,133 @@
 <Window x:Class="MeshyRhino.UI.MeshySettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Meshy Settings" Height="220" Width="450"
-        WindowStartupLocation="CenterScreen"
+        Title="Meshy Settings" Height="480" Width="480"
+        WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="#F5F5F5">
 
-    <Grid Margin="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="12"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="12"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <Window.Resources>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,10,0,4"/>
+        </Style>
+    </Window.Resources>
 
-        <TextBlock Grid.Row="0" Text="Meshy API Key" FontWeight="SemiBold" FontSize="14"/>
-
-        <TextBlock Grid.Row="2" Text="Enter your Meshy API key (starts with msy_). You can get one at meshy.ai/settings/api"
-                   TextWrapping="Wrap" Foreground="#666" FontSize="11"/>
-
-        <TextBox Grid.Row="4" x:Name="ApiKeyTextBox" FontSize="13" Padding="6,4"/>
-
-        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+    <DockPanel Margin="20">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button Content="Cancel" Width="80" Height="30" Margin="0,0,8,0"
                     Click="CancelButton_Click"/>
             <Button Content="Save" Width="80" Height="30"
                     Click="SaveButton_Click" IsDefault="True"
                     Background="#2D7DD2" Foreground="White" FontWeight="SemiBold"/>
         </StackPanel>
-    </Grid>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <!-- API Key -->
+                <TextBlock Text="Meshy API Key" Style="{StaticResource FieldLabel}" Margin="0,0,0,4"/>
+                <TextBlock Text="Enter your key (starts with msy_). Get one at meshy.ai/settings/api"
+                           TextWrapping="Wrap" Foreground="#666" FontSize="10" Margin="0,0,0,4"/>
+                <TextBox x:Name="ApiKeyTextBox" FontSize="13" Padding="6,4"/>
+
+                <Separator Margin="0,14,0,0"/>
+
+                <!-- Default Generation Options -->
+                <TextBlock Text="Default Generation Options" FontWeight="Bold" FontSize="13" Margin="0,12,0,2"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="AI Model" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox x:Name="CbDefaultAiModel" SelectedIndex="0">
+                            <ComboBoxItem Content="Meshy-6 (Latest)" Tag="latest"/>
+                            <ComboBoxItem Content="Meshy-5" Tag="meshy-5"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                        <TextBlock Text="Model Type" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox x:Name="CbDefaultModelType" SelectedIndex="0">
+                            <ComboBoxItem Content="Standard" Tag="standard"/>
+                            <ComboBoxItem Content="Low Poly" Tag="lowpoly"/>
+                        </ComboBox>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Margin="0,4,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Topology" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox x:Name="CbDefaultTopology" SelectedIndex="0">
+                            <ComboBoxItem Content="Triangle" Tag="triangle"/>
+                            <ComboBoxItem Content="Quad" Tag="quad"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                        <TextBlock Text="Target Polycount" Style="{StaticResource FieldLabel}"/>
+                        <TextBox x:Name="TbDefaultPolycount" Text="30000" Padding="6,4"/>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Margin="0,4,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Symmetry" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox x:Name="CbDefaultSymmetry" SelectedIndex="0">
+                            <ComboBoxItem Content="Auto" Tag="auto"/>
+                            <ComboBoxItem Content="On" Tag="on"/>
+                            <ComboBoxItem Content="Off" Tag="off"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                        <TextBlock Text="Output Format" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox x:Name="CbDefaultFormat" SelectedIndex="0">
+                            <ComboBoxItem Content="GLB (Native Import)" Tag="glb"/>
+                            <ComboBoxItem Content="OBJ (Custom Parser)" Tag="obj"/>
+                        </ComboBox>
+                    </StackPanel>
+                </Grid>
+
+                <CheckBox x:Name="CbDefaultPbr" Content="Enable PBR maps by default" Margin="0,12,0,0"/>
+
+                <Separator Margin="0,14,0,0"/>
+
+                <!-- Advanced -->
+                <TextBlock Text="Advanced" FontWeight="Bold" FontSize="13" Margin="0,12,0,2"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Poll Interval (ms)" Style="{StaticResource FieldLabel}"/>
+                        <TextBox x:Name="TbPollInterval" Text="3000" Padding="6,4"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                        <TextBlock Text="API Retry Count" Style="{StaticResource FieldLabel}"/>
+                        <TextBox x:Name="TbRetryCount" Text="2" Padding="6,4"/>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
 </Window>

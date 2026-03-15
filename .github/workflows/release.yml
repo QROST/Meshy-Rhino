@@ -20,11 +20,11 @@ jobs:
       - name: Build
         run: dotnet build Meshy-Rhino.sln --configuration Release
 
-      - name: Package
+      - name: Package ZIP
         shell: pwsh
         run: |
           $outDir = "MeshyRhino/bin/Release"
-          $staging = "staging"
+          $staging = "staging-zip"
 
           New-Item -ItemType Directory -Path $staging -Force
 
@@ -35,11 +35,39 @@ jobs:
 
           Compress-Archive -Path "$staging/*" -DestinationPath "MeshyRhino.zip"
 
-      - name: Upload artifact
+      - name: Package YAK
+        shell: pwsh
+        run: |
+          $outDir = "MeshyRhino/bin/Release"
+          $staging = "staging-yak"
+
+          New-Item -ItemType Directory -Path $staging -Force
+
+          # manifest.yml at the root of the yak package
+          Copy-Item "manifest.yml" -Destination $staging
+
+          # DLLs into net7.0 subdirectory for Rhino 8
+          $net7Dir = Join-Path $staging "net7.0"
+          New-Item -ItemType Directory -Path $net7Dir -Force
+          Get-ChildItem "$outDir/*.dll" | Copy-Item -Destination $net7Dir
+
+          # Extract version from manifest for the yak filename
+          $version = (Select-String -Path "manifest.yml" -Pattern "^version:\s*(.+)$").Matches[0].Groups[1].Value.Trim()
+          $yakName = "meshy-rhino-$version-rh8_0-any.yak"
+
+          Compress-Archive -Path "$staging/*" -DestinationPath $yakName
+
+      - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MeshyRhino
+          name: MeshyRhino-zip
           path: MeshyRhino.zip
+
+      - name: Upload YAK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MeshyRhino-yak
+          path: "*.yak"
 
   release:
     needs: build
@@ -58,12 +86,21 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*.zip
+          files: |
+            artifacts/**/*.zip
+            artifacts/**/*.yak
           generate_release_notes: true
           body: |
             ## Installation
 
+            ### Option 1: Manual Install
             1. Download `MeshyRhino.zip`
             2. Extract into a folder (e.g. `%APPDATA%\McNeel\Rhinoceros\8.0\Plug-ins\MeshyRhino\`)
             3. In Rhino, run `_PlugInManager`, click **Install**, and select `MeshyRhino.dll`
+            4. Run the `Meshy3DGenerator` command
+
+            ### Option 2: Yak Package
+            1. Download the `.yak` file
+            2. In Rhino, run `_-TestPackageManager _Install` and point to the `.yak` file
+            3. Restart Rhino
             4. Run the `Meshy3DGenerator` command
