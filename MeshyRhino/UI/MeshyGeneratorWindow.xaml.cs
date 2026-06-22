@@ -262,8 +262,9 @@ namespace MeshyRhino.UI
                 ThumbnailImage.Source = bitmap;
                 ThumbnailBorder.Visibility = Visibility.Visible;
             }
-            catch
+            catch (Exception ex)
             {
+                RhinoApp.WriteLine($"[Meshy Rhino] Could not load thumbnail: {ex.Message}");
                 ThumbnailBorder.Visibility = Visibility.Collapsed;
             }
         }

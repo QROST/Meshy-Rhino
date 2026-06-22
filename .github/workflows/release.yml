@@ -23,6 +23,18 @@ jobs:
       - name: Build
         run: dotnet build Meshy-Rhino.sln --configuration Release
 
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          $outDir = "MeshyRhino/bin/Release"
+          foreach ($dll in @("MeshyRhino.dll", "Newtonsoft.Json.dll")) {
+            if (-not (Test-Path (Join-Path $outDir $dll))) {
+              Write-Error "Required assembly '$dll' is missing from $outDir"
+              exit 1
+            }
+          }
+          Write-Host "Build output verified: MeshyRhino.dll, Newtonsoft.Json.dll present."
+
       - name: Package ZIP
         shell: pwsh
         run: |

@@ -65,8 +65,7 @@ namespace MeshyRhino.Services
             await EnsureSuccessAsync(response);
 
             string body = await response.Content.ReadAsStringAsync();
-            var result = JsonConvert.DeserializeObject<MeshyTaskCreateResponse>(body);
-            return result.Result;
+            return ParseTaskId(body);
         }
 
         public async Task<string> CreateTextTo3DRefineAsync(TextTo3DRefineRequest request, CancellationToken ct = default)
@@ -78,8 +77,7 @@ namespace MeshyRhino.Services
             await EnsureSuccessAsync(response);
 
             string body = await response.Content.ReadAsStringAsync();
-            var result = JsonConvert.DeserializeObject<MeshyTaskCreateResponse>(body);
-            return result.Result;
+            return ParseTaskId(body);
         }
 
         public async Task<MeshyTaskStatus> GetTextTo3DTaskAsync(string taskId, CancellationToken ct = default)
@@ -104,8 +102,7 @@ namespace MeshyRhino.Services
             await EnsureSuccessAsync(response);
 
             string body = await response.Content.ReadAsStringAsync();
-            var result = JsonConvert.DeserializeObject<MeshyTaskCreateResponse>(body);
-            return result.Result;
+            return ParseTaskId(body);
         }
 
         public async Task<MeshyTaskStatus> GetImageTo3DTaskAsync(string taskId, CancellationToken ct = default)
@@ -130,8 +127,7 @@ namespace MeshyRhino.Services
             await EnsureSuccessAsync(response);
 
             string body = await response.Content.ReadAsStringAsync();
-            var result = JsonConvert.DeserializeObject<MeshyTaskCreateResponse>(body);
-            return result.Result;
+            return ParseTaskId(body);
         }
 
         public async Task<MeshyTaskStatus> GetMultiImageTo3DTaskAsync(string taskId, CancellationToken ct = default)
@@ -156,8 +152,7 @@ namespace MeshyRhino.Services
             await EnsureSuccessAsync(response);
 
             string body = await response.Content.ReadAsStringAsync();
-            var result = JsonConvert.DeserializeObject<MeshyTaskCreateResponse>(body);
-            return result.Result;
+            return ParseTaskId(body);
         }
 
         public async Task<MeshyTaskStatus> GetRetextureTaskAsync(string taskId, CancellationToken ct = default)
@@ -203,6 +198,10 @@ namespace MeshyRhino.Services
                     continue;
                 }
 
+                if (status == null)
+                    throw new InvalidOperationException(
+                        "[Meshy Rhino] Received an empty task status from the API.");
+
                 progress?.Report(status.Progress);
 
                 if (status.Status == "SUCCEEDED")
@@ -240,14 +239,14 @@ namespace MeshyRhino.Services
         public async Task<string> DownloadObjAsync(string objUrl, CancellationToken ct = default)
         {
             var response = await _downloadClient.GetAsync(objUrl, ct);
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response);
             return await response.Content.ReadAsStringAsync();
         }
 
         public async Task<byte[]> DownloadBytesAsync(string url, CancellationToken ct = default)
         {
             var response = await _downloadClient.GetAsync(url, ct);
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response);
             return await response.Content.ReadAsByteArrayAsync();
         }
 
@@ -296,6 +295,15 @@ namespace MeshyRhino.Services
                 default:
                     return false;
             }
+        }
+
+        private static string ParseTaskId(string body)
+        {
+            var result = JsonConvert.DeserializeObject<MeshyTaskCreateResponse>(body);
+            if (string.IsNullOrEmpty(result?.Result))
+                throw new InvalidOperationException(
+                    "[Meshy Rhino] The API response did not contain a task ID.");
+            return result.Result;
         }
 
         private async Task EnsureSuccessAsync(HttpResponseMessage response)
