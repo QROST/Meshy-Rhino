@@ -51,7 +51,7 @@ namespace MeshyRhino.Models
         [JsonProperty("ai_model")]
         public string AiModel { get; set; } = "latest";
 
-        [JsonProperty("texture_prompt")]
+        [JsonProperty("texture_prompt", NullValueHandling = NullValueHandling.Ignore)]
         public string TexturePrompt { get; set; }
     }
 

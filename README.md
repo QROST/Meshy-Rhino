@@ -94,7 +94,7 @@ A `manifest.yml` is included for Yak packaging. Build the `.yak` package with:
 
 Click **Settings** in the generator window to configure:
 - **API Key**: Your Meshy API key
-- **Default AI Model, Model Type, Topology, Polycount, Symmetry, Format**: Saved and applied automatically on launch
+- **Default AI Model, Model Type, Topology, Polycount, Symmetry, Format, Placement**: Saved and applied automatically on launch
 - **Enable PBR**: Default PBR map generation toggle
 - **Poll Interval**: How frequently to check task progress (ms)
 - **API Retry Count**: Number of retries for transient failures
@@ -169,7 +169,15 @@ Contributions are welcome. Please feel free to submit a Pull Request.
 
 ## Changelog
 
-### Version 0.3.0 (Current)
+### Version 0.3.1 (Current)
+
+* **Persistent placement default**: The default placement (Mesh Object / Block Instance) is now configurable in Settings and applied on launch -- previously the value was reset whenever any setting was saved
+* **Smarter retries**: Transient failures (network errors, request timeouts, and HTTP 429/5xx) are retried with exponential backoff, while permanent errors (invalid API key, bad request, insufficient credits) now fail fast instead of wasting retry attempts
+* **Resilient polling**: A transient network blip while polling task progress no longer aborts an in-progress generation -- the poll retries before giving up
+* **Cleaner refine requests**: An empty texture prompt is now omitted from the refine request rather than sent as an empty string
+* **Continuous integration**: Added a CI workflow that builds Debug and Release on every push and pull request
+
+### Version 0.3.0
 
 * **Text-to-Texture (Retexture)**: New tab for applying textures to existing models via text prompts or reference images, using the `/openapi/v1/retexture` endpoint
 * **Expanded settings window**: Configure all defaults (AI model, model type, topology, polycount, symmetry, format, PBR, poll interval, retry count) -- not just the API key

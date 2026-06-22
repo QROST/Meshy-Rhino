@@ -25,6 +25,7 @@ namespace MeshyRhino.UI
             SelectByTag(CbDefaultTopology, s.DefaultTopology);
             SelectByTag(CbDefaultSymmetry, s.DefaultSymmetryMode);
             SelectByTag(CbDefaultFormat, s.DefaultFormat);
+            SelectByTag(CbDefaultPlacement, s.DefaultPlacement);
 
             TbDefaultPolycount.Text = s.DefaultPolycount.ToString();
             CbDefaultPbr.IsChecked = s.EnablePbr;
@@ -74,6 +75,7 @@ namespace MeshyRhino.UI
                 DefaultTopology = GetTag(CbDefaultTopology) ?? "triangle",
                 DefaultSymmetryMode = GetTag(CbDefaultSymmetry) ?? "auto",
                 DefaultFormat = GetTag(CbDefaultFormat) ?? "glb",
+                DefaultPlacement = GetTag(CbDefaultPlacement) ?? "mesh",
                 DefaultPolycount = polycount,
                 EnablePbr = CbDefaultPbr.IsChecked == true,
                 PollIntervalMs = pollMs,

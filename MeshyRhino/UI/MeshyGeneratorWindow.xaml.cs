@@ -321,7 +321,7 @@ namespace MeshyRhino.UI
                     var previewResult = await api.PollUntilCompleteAsync(
                         previewId, GenerationMode.TextTo3D,
                         new Progress<int>(p => SetStatus($"Preview: {p}%", p / progressScale)),
-                        _cts.Token, settings.PollIntervalMs);
+                        _cts.Token, settings.PollIntervalMs, retries);
 
                     ShowThumbnail(previewResult.ThumbnailUrl);
 
@@ -332,12 +332,13 @@ namespace MeshyRhino.UI
                     }
 
                     SetStatus("[Meshy Rhino] Creating refine task...", 50);
+                    string texturePrompt = TbTexturePrompt.Text?.Trim();
                     var refineRequest = new TextTo3DRefineRequest
                     {
                         PreviewTaskId = previewId,
                         EnablePbr = CbPbr.IsChecked == true,
                         AiModel = GetSelectedAiModel(),
-                        TexturePrompt = TbTexturePrompt.Text?.Trim()
+                        TexturePrompt = string.IsNullOrWhiteSpace(texturePrompt) ? null : texturePrompt
                     };
 
                     string refineId = await api.WithRetryAsync(
@@ -349,7 +350,7 @@ namespace MeshyRhino.UI
                     var refineResult = await api.PollUntilCompleteAsync(
                         refineId, GenerationMode.TextTo3D,
                         new Progress<int>(p => SetStatus($"Refine: {p}%", 50 + p / 2)),
-                        _cts.Token, settings.PollIntervalMs);
+                        _cts.Token, settings.PollIntervalMs, retries);
 
                     ShowThumbnail(refineResult.ThumbnailUrl);
                     await DownloadAndPlace(api, refineResult, prompt, _cts.Token);
@@ -420,7 +421,7 @@ namespace MeshyRhino.UI
                     var result = await api.PollUntilCompleteAsync(
                         taskId, GenerationMode.ImageTo3D,
                         new Progress<int>(p => SetStatus($"Progress: {p}%", p)),
-                        _cts.Token, settings.PollIntervalMs);
+                        _cts.Token, settings.PollIntervalMs, retries);
 
                     ShowThumbnail(result.ThumbnailUrl);
                     await DownloadAndPlace(api, result, "Meshy_ImageTo3D", _cts.Token);
@@ -501,7 +502,7 @@ namespace MeshyRhino.UI
                     var result = await api.PollUntilCompleteAsync(
                         taskId, GenerationMode.MultiImageTo3D,
                         new Progress<int>(p => SetStatus($"Progress: {p}%", p)),
-                        _cts.Token, settings.PollIntervalMs);
+                        _cts.Token, settings.PollIntervalMs, retries);
 
                     ShowThumbnail(result.ThumbnailUrl);
                     await DownloadAndPlace(api, result, "Meshy_MultiImageTo3D", _cts.Token);
@@ -639,7 +640,7 @@ namespace MeshyRhino.UI
                     var result = await api.PollUntilCompleteAsync(
                         newTaskId, GenerationMode.Retexture,
                         new Progress<int>(p => SetStatus($"Progress: {p}%", p)),
-                        _cts.Token, settings.PollIntervalMs);
+                        _cts.Token, settings.PollIntervalMs, retries);
 
                     ShowThumbnail(result.ThumbnailUrl);
                     await DownloadAndPlace(api, result, "Meshy_Retexture", _cts.Token);

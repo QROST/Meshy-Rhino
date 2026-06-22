@@ -8,5 +8,5 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCopyright("Copyright © QROST 2026. Licensed under GPL v3.")]
 [assembly: ComVisible(false)]
 [assembly: Guid("99A4E20A-6440-4ECA-AC44-93A19E66400B")]
-[assembly: AssemblyVersion("0.3.0.0")]
-[assembly: AssemblyFileVersion("0.3.0.0")]
+[assembly: AssemblyVersion("0.3.1.0")]
+[assembly: AssemblyFileVersion("0.3.1.0")]

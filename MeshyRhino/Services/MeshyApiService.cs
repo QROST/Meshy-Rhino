@@ -1,6 +1,7 @@
 // <author>QROST</author>
 
 using System;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -11,6 +12,30 @@ using Newtonsoft.Json;
 
 namespace MeshyRhino.Services
 {
+    /// <summary>
+    /// Thrown when the Meshy API returns a non-success HTTP status code.
+    /// Carries the status code so callers can distinguish transient failures
+    /// (worth retrying) from permanent ones (fail fast).
+    /// </summary>
+    public class MeshyApiException : Exception
+    {
+        public HttpStatusCode StatusCode { get; }
+
+        public MeshyApiException(HttpStatusCode statusCode, string message)
+            : base(message)
+        {
+            StatusCode = statusCode;
+        }
+
+        /// <summary>
+        /// 5xx server errors and 429 (Too Many Requests) are transient and
+        /// safe to retry; 4xx client errors (bad request, invalid key,
+        /// insufficient credits, not found) are not.
+        /// </summary>
+        public bool IsTransient =>
+            (int)StatusCode >= 500 || StatusCode == (HttpStatusCode)429;
+    }
+
     public class MeshyApiService : IDisposable
     {
         private const string BaseUrl = "https://api.meshy.ai";
@@ -153,27 +178,29 @@ namespace MeshyRhino.Services
             GenerationMode mode,
             IProgress<int> progress = null,
             CancellationToken ct = default,
-            int pollIntervalMs = 3000)
+            int pollIntervalMs = 3000,
+            int maxTransientRetries = 2)
         {
+            int consecutiveFailures = 0;
+
             while (!ct.IsCancellationRequested)
             {
                 MeshyTaskStatus status;
-                switch (mode)
+                try
                 {
-                    case GenerationMode.TextTo3D:
-                        status = await GetTextTo3DTaskAsync(taskId, ct);
-                        break;
-                    case GenerationMode.ImageTo3D:
-                        status = await GetImageTo3DTaskAsync(taskId, ct);
-                        break;
-                    case GenerationMode.MultiImageTo3D:
-                        status = await GetMultiImageTo3DTaskAsync(taskId, ct);
-                        break;
-                    case GenerationMode.Retexture:
-                        status = await GetRetextureTaskAsync(taskId, ct);
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException(nameof(mode));
+                    status = await GetTaskStatusAsync(taskId, mode, ct);
+                    consecutiveFailures = 0;
+                }
+                catch (Exception ex) when (
+                    IsTransientFailure(ex) &&
+                    !ct.IsCancellationRequested &&
+                    consecutiveFailures < maxTransientRetries)
+                {
+                    // A transient blip while polling should not abort a job that
+                    // may already be most of the way through generation.
+                    consecutiveFailures++;
+                    await Task.Delay(pollIntervalMs, ct);
+                    continue;
                 }
 
                 progress?.Report(status.Progress);
@@ -191,6 +218,23 @@ namespace MeshyRhino.Services
             }
 
             throw new OperationCanceledException();
+        }
+
+        private Task<MeshyTaskStatus> GetTaskStatusAsync(string taskId, GenerationMode mode, CancellationToken ct)
+        {
+            switch (mode)
+            {
+                case GenerationMode.TextTo3D:
+                    return GetTextTo3DTaskAsync(taskId, ct);
+                case GenerationMode.ImageTo3D:
+                    return GetImageTo3DTaskAsync(taskId, ct);
+                case GenerationMode.MultiImageTo3D:
+                    return GetMultiImageTo3DTaskAsync(taskId, ct);
+                case GenerationMode.Retexture:
+                    return GetRetextureTaskAsync(taskId, ct);
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(mode));
+            }
         }
 
         public async Task<string> DownloadObjAsync(string objUrl, CancellationToken ct = default)
@@ -218,7 +262,10 @@ namespace MeshyRhino.Services
                 {
                     return await action();
                 }
-                catch (HttpRequestException) when (attempt < maxRetries && !ct.IsCancellationRequested)
+                catch (Exception ex) when (
+                    attempt < maxRetries &&
+                    !ct.IsCancellationRequested &&
+                    IsTransientFailure(ex))
                 {
                     attempt++;
                     int delayMs = 1000 * (1 << attempt);
@@ -227,12 +274,37 @@ namespace MeshyRhino.Services
             }
         }
 
+        /// <summary>
+        /// Determines whether a failure is worth retrying: raw network errors,
+        /// request timeouts (surfaced by HttpClient as <see cref="TaskCanceledException"/>),
+        /// and transient HTTP status codes (5xx / 429). Permanent client errors
+        /// (4xx) and user cancellations are not treated as transient.
+        /// </summary>
+        private static bool IsTransientFailure(Exception ex)
+        {
+            switch (ex)
+            {
+                case MeshyApiException me:
+                    return me.IsTransient;
+                case HttpRequestException _:
+                    return true;
+                case TaskCanceledException _:
+                    // A genuine user cancellation is filtered out by the caller's
+                    // CancellationToken check before this predicate is evaluated,
+                    // so reaching here means the request timed out.
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         private async Task EnsureSuccessAsync(HttpResponseMessage response)
         {
             if (!response.IsSuccessStatusCode)
             {
                 string errorBody = await response.Content.ReadAsStringAsync();
-                throw new HttpRequestException(
+                throw new MeshyApiException(
+                    response.StatusCode,
                     $"[Meshy Rhino] API error ({(int)response.StatusCode} {response.ReasonPhrase}): {errorBody}");
             }
         }
